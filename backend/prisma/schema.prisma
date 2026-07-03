@@ -1,0 +1,188 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AdminUser {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String
+  role         String   @default("admin")
+  isActive     Boolean  @default(true)
+  lastLogin    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  auditLogs    AuditLog[]
+
+  @@map("admin_users")
+}
+
+model ChatSession {
+  id          String   @id @default(uuid())
+  sessionId   String   @unique
+  browserId   String?
+  ipAddress   String?
+  country     String?
+  device      String?
+  userAgent   String?
+  startTime   DateTime @default(now())
+  endTime     DateTime?
+  duration    Int?     // seconds
+  status      String   @default("active") // active, completed, abandoned
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  messages    ChatMessage[]
+  lead        Lead?
+  callLog     CallLog?
+
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id         String   @id @default(uuid())
+  sessionId  String
+  sender     String   // user | bot
+  message    String   @db.Text
+  metadata   Json?
+  timestamp  DateTime @default(now())
+
+  session    ChatSession @relation(fields: [sessionId], references: [sessionId])
+
+  @@map("chat_messages")
+}
+
+model Lead {
+  id             String   @id @default(uuid())
+  sessionId      String   @unique
+  phone          String
+  name           String?
+  email          String?
+  interestedIn   String?
+  question       String?  @db.Text
+  status         String   @default("new") // new, called, callback, converted, lost
+  callStatus     String?  // pending, initiated, answered, failed, no_answer
+  assignedTo     String?
+  followUpDate   DateTime?
+  notes          String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  session        ChatSession @relation(fields: [sessionId], references: [sessionId])
+
+  @@map("leads")
+}
+
+model CallLog {
+  id          String   @id @default(uuid())
+  sessionId   String   @unique
+  phone       String
+  callSid     String?  @unique
+  status      String   @default("initiated") // initiated, ringing, in-progress, completed, failed, no-answer, busy
+  duration    Int?     // seconds
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  retryCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  session     ChatSession @relation(fields: [sessionId], references: [sessionId])
+  recording   CallRecording?
+
+  @@map("call_logs")
+}
+
+model CallRecording {
+  id             String   @id @default(uuid())
+  callLogId      String   @unique
+  sessionId      String
+  recordingUrl   String?
+  recordingSid   String?
+  transcript     String?  @db.Text
+  summary        String?  @db.Text
+  duration       Int?
+  createdAt      DateTime @default(now())
+
+  callLog        CallLog  @relation(fields: [callLogId], references: [id])
+
+  @@map("call_recordings")
+}
+
+model KnowledgeBase {
+  id          String   @id @default(uuid())
+  url         String?
+  title       String
+  content     String   @db.Text
+  embedding   Float[]  // stored as array for pgvector or computed similarity
+  category    String   @default("general")
+  source      String   @default("website") // website | pdf | manual
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("knowledge_base")
+}
+
+model FAQ {
+  id        String   @id @default(uuid())
+  question  String
+  answer    String   @db.Text
+  category  String   @default("general")
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("faqs")
+}
+
+model Analytics {
+  id           String   @id @default(uuid())
+  date         DateTime @db.Date
+  totalVisitors Int     @default(0)
+  totalLeads   Int      @default(0)
+  totalCalls   Int      @default(0)
+  answeredCalls Int     @default(0)
+  failedCalls  Int      @default(0)
+  avgChatTime  Float?
+  avgCallDuration Float?
+  popularQuestions Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([date])
+  @@map("analytics")
+}
+
+model AppSettings {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @db.Text
+  encrypted Boolean  @default(false)
+  category  String   @default("general")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("app_settings")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  adminId    String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  admin      AdminUser? @relation(fields: [adminId], references: [id])
+
+  @@map("audit_logs")
+}

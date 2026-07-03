@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  # ─── PostgreSQL Database ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: gs_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: grand_sangamam
+      POSTGRES_USER: ${DB_USER:-gsadmin}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gspassword2026}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-gsadmin} -d grand_sangamam"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gs_network
+
+  # ─── Backend API ─────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: gs_backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-gsadmin}:${DB_PASSWORD:-gspassword2026}@postgres:5432/grand_sangamam
+      NODE_ENV: production
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend/logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - gs_network
+    command: >
+      sh -c "npx prisma migrate deploy && npm run seed && node src/index.js"
+
+  # ─── Frontend Chatbot ─────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${BACKEND_URL:-http://localhost:5000}
+    container_name: gs_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    networks:
+      - gs_network
+
+  # ─── Admin Dashboard ──────────────────────────────────
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${BACKEND_URL:-http://localhost:5000}
+    container_name: gs_admin
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    networks:
+      - gs_network
+
+  # ─── Nginx Reverse Proxy ─────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: gs_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_conf:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+      - frontend
+      - admin
+    networks:
+      - gs_network
+
+volumes:
+  postgres_data:
+  certbot_www:
+  certbot_conf:
+
+networks:
+  gs_network:
+    driver: bridge

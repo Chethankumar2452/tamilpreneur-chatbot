@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f8fafc;
+}
+
+.sidebar-link.active {
+  background: #fff7ed;
+  color: #ea580c;
+  border-right: 3px solid #ea580c;
+}
